@@ -1,0 +1,309 @@
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
+    <style>
+      body {
+        padding: 0;
+        margin: 0;
+      }
+      html, body, #map {
+        height: 100%;
+        width: 100%;
+      }
+      #overpass-api-controls {
+        padding: 10px;
+        background-color: rgb(255, 255, 255);
+      }
+      #overpass-api-controls a {
+        display: inline;
+      }
+    </style>
+
+  <title>SuperMarket Queue Lenght Status Prototype</title>
+
+      <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+  <script type="text/javascript">
+      var lat = 51.0;
+      var lon = 10.5;
+      var zoom = 6;
+      var map;
+      var resultLayer;
+      var client;
+      var topics={};
+      var colorMap={};
+
+
+    var geojsonMarkerOptions = {
+      radius: 8,
+      fillColor: "#ff7800",
+      color: "#000",
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8
+    };
+
+
+var template = '<form id="popup-form">\
+  <label for="input-speed">New speed:</label>\
+  <input id="input-speed" class="popup-input" type="number" />\
+  <table class="popup-table">\
+    <tr class="popup-table-row">\
+      <th class="popup-table-header">Name:</th>\
+      <td id="value-name" class="popup-table-data"></td>\
+    </tr>\
+    <tr class="popup-table-row">\
+      <th class="popup-table-header">Current speed:</th>\
+      <td id="value-speed" class="popup-table-data"></td>\
+    </tr>\
+  </table>\
+  <button id="button-submit-short" type="button">No Queue</button>\
+  <button id="button-submit-medium" type="button">Short Queue</button>\
+  <button id="button-submit-long" type="button">Long Queue</button>\
+</form>';
+
+	// called when the client connects
+	function onConnect() {
+	  // Once a connection has been made, make a subscription and send a message.
+	  console.log("onConnect");
+
+      Object.entries(topics).forEach(entry => {
+        let key = entry[0];
+        let value = entry[1];
+        console.log("subscribing to: "+key);
+        client.subscribe(key);
+
+        //use key and value here
+      });
+
+	  message = new Paho.MQTT.Message("Hello");
+	  message.destinationName = "World";
+	  client.send(message);
+	}
+
+	// called when the client loses its connection
+	function onConnectionLost(responseObject) {
+	  if (responseObject.errorCode !== 0) {
+	    console.log("onConnectionLost:"+responseObject.errorMessage);
+	  }
+
+     client.connect({onSuccess:onConnect,
+            useSSL:true
+            })
+
+	}
+
+
+function layerClickHandler (e) {
+
+  var marker = e.target,
+      properties = e.target.feature.properties;
+
+  if (marker.hasOwnProperty('_popup')) {
+    marker.unbindPopup();
+  }
+
+  marker.bindPopup(template);
+  marker.openPopup();
+
+  L.DomUtil.get('value-name').textContent = properties.tags["name"];
+  L.DomUtil.get('value-speed').textContent = properties.speed;
+
+  var inputSpeed = L.DomUtil.get('input-speed');
+  inputSpeed.value = properties.speed;
+  L.DomEvent.addListener(inputSpeed, 'change', function (e) {
+    properties.speed = e.target.value;
+  });
+
+  var buttonSubmitLong = L.DomUtil.get('button-submit-long');
+  var buttonSubmitShort = L.DomUtil.get('button-submit-short');
+  var buttonSubmitMedium = L.DomUtil.get('button-submit-medium');
+
+  L.DomEvent.addListener(buttonSubmitLong, 'click', function (e) {
+    featureID=properties.id;
+    topic="de/hackathon/supermarkets/"+featureID+"/color";
+    console.log("sending to topic "+topic);
+
+    message = new Paho.MQTT.Message("#FF0000");
+    message.destinationName = topic;
+    message.retained=true;
+
+    client.send(message);
+
+    marker.closePopup();
+  });
+
+  L.DomEvent.addListener(buttonSubmitShort, 'click', function (e) {
+    featureID=properties.id;
+    topic="de/hackathon/supermarkets/"+featureID+"/color";
+    console.log("sending to topic "+topic);
+
+    message = new Paho.MQTT.Message("#00FF00");
+    message.destinationName = topic;
+    message.retained=true;
+
+    client.send(message);
+
+    marker.closePopup();
+  });
+
+  L.DomEvent.addListener(buttonSubmitMedium, 'click', function (e) {
+    featureID=properties.id;
+    topic="de/hackathon/supermarkets/"+featureID+"/color";
+    console.log("sending to topic "+topic);
+
+    message = new Paho.MQTT.Message("#00FFFF");
+    message.destinationName = topic;
+    message.retained=true;
+
+    client.send(message);
+
+    marker.closePopup();
+  });
+
+
+
+
+}
+
+      function styleFunction(feature) {
+        console.log("feature style:" + feature.properties);
+        console.log("color map:"+colorMap[feature.properties["color"]])
+        if (feature.properties["color"]) {
+         return {color: feature.properties["color"]};
+        } else {
+         return {color: "green"};
+        }
+      }
+
+	// called when a message arrives
+	function onMessageArrived(message) {
+	  console.log("onMessageArrived:"+message.destinationName+": "+message.payloadString);
+	  var topic=message.destinationName.split("/");
+	  var deviceID=topic[3];
+	  console.log("deviceID:"+deviceID);
+
+
+	  var color=message.payloadString;
+
+	  console.log("color:"+color);
+
+	  var selected_polygon_style = {
+        strokeWidth: 5,
+        strokeColor: color,
+        fillColor:color
+        // add more styling key/value pairs as your need
+      };
+
+      var feature=topics[message.destinationName];
+      if (feature){
+        feature.properties["color"]=color;
+        resultLayer.setStyle(styleFunction);
+      }
+	}
+
+
+
+      function init(){
+      map = L.map('map').setView([51.2585357,9.4491496], 14);
+      L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
+      }).addTo(map);
+
+
+      function buildOverpassApiUrl(map, overpassQuery) {
+        var bounds = map.getBounds().getSouth() + ',' + map.getBounds().getWest() + ',' + map.getBounds().getNorth() + ',' + map.getBounds().getEast();
+        var nodeQuery = 'node[' + overpassQuery + '](' + bounds + ');';
+        var wayQuery = 'way[' + overpassQuery + '](' + bounds + ');';
+        var relationQuery = 'relation[' + overpassQuery + '](' + bounds + ');';
+        var query = '?data=[out:json][timeout:15];(' + nodeQuery + wayQuery + relationQuery + ');out body geom;';
+        var baseUrl = 'https://overpass-api.de/api/interpreter';
+        var resultUrl = baseUrl + query;
+        return resultUrl;
+      }
+
+      $("#query-button").click(function () {
+        topics={};
+        if (resultLayer) {
+          map.removeLayer(resultLayer);
+        }
+        var queryTextfieldValue = $("#query-textfield").val();
+        var overpassApiUrl = buildOverpassApiUrl(map, queryTextfieldValue);
+
+        $.get(overpassApiUrl, function (osmDataAsJson) {
+          var resultAsGeojson = osmtogeojson(osmDataAsJson);
+          resultLayer = L.geoJson(resultAsGeojson, {
+            style: styleFunction,
+            pointToLayer: function (feature, latlng) {
+              return L.circleMarker(latlng, geojsonMarkerOptions);
+             },
+            filter: function (feature, layer) {
+              console.log(feature);
+              var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
+              var isPoint = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Point");
+              //isPolygon = false;
+              if (isPoint) {
+                //feature.geometry.type = "LineString";
+                //var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
+                //feature.geometry.coordinates = [ polygonCenter.lat, polygonCenter.lng ];
+              }
+              return true;
+            },
+            onEachFeature: function (feature, layer) {
+              console.log("feature:" + feature.id);
+              featureID=feature.properties.id;
+              topic="de/hackathon/supermarkets/"+featureID+"/color";
+              topics[topic] = feature;
+              layer.on('click',layerClickHandler);
+            }
+          }).addTo(map);
+          //map.on('click',onMapClick);
+          if (client.isConnected())
+            client.disconnect();
+
+        });
+      });
+
+
+            // Create a client instance
+            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), "clientId");
+
+            // set callback handlers
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+
+            // connect the client
+            client.connect(
+            {onSuccess:onConnect,
+            useSSL:true
+            }
+            );
+      }
+
+
+  </script>
+</head>
+<body onload="init()">
+  <div id="statusline" style="font-size:24pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
+  <div id="map" class="smallmap">
+    <div class="leaflet-control-container">
+        <div class="leaflet-top leaflet-right">
+          <div id="overpass-api-controls" class="leaflet-bar leaflet-control">
+            <input id="query-textfield" value="shop=supermarket" size="50">
+            <input id="query-button" type="button" value="Laden">
+          </div>
+        </div>
+      </div>
+  </div>
+
+</body>
+</html>
+
+
