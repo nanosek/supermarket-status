@@ -50,6 +50,13 @@
     };
 
 
+function createClientID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+        return v.toString(16);
+    });
+}
+
 var template = '<form id="popup-form">\
   <label for="input-speed">New speed:</label>\
   <input id="input-speed" class="popup-input" type="number" />\
@@ -273,7 +280,7 @@ function layerClickHandler (e) {
 
 
             // Create a client instance
-            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), "clientId");
+            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), createClientID());
 
             // set callback handlers
             client.onConnectionLost = onConnectionLost;
