@@ -1,0 +1,134 @@
+
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
+  <title>SuperMarket Queue Lenght Status Prototype</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+  <script src="http://openlayers.org/api/2.11/OpenLayers.js"></script>
+  <script src="http://openstreetmap.org/openlayers/OpenStreetMap.js"></script>
+  <script src="http://overpass-api.de/overpass.js"></script>
+  <script type="text/javascript">
+      var lat = 51.0;
+      var lon = 10.5;
+      var zoom = 6;
+      var map;
+      var myLayer;
+      var client;
+
+
+
+    function onMapClick(e) {
+       alert("You clicked the map at " + e.latlng);
+    }
+
+
+	// called when the client connects
+	function onConnect() {
+	  // Once a connection has been made, make a subscription and send a message.
+	  console.log("onConnect");
+
+	  client.subscribe("de/hackathon/supermarkets/+/color");
+	  message = new Paho.MQTT.Message("Hello");
+	  message.destinationName = "World";
+	  client.send(message);
+	}
+
+	// called when the client loses its connection
+	function onConnectionLost(responseObject) {
+	  if (responseObject.errorCode !== 0) {
+	    console.log("onConnectionLost:"+responseObject.errorMessage);
+	  }
+	}
+
+	// called when a message arrives
+	function onMessageArrived(message) {
+	  console.log("onMessageArrived:"+message.destinationName+": "+message.payloadString);
+	  var topic=message.destinationName.split("/");
+	  var deviceID=topic[3];
+	  console.log("deviceID:"+deviceID);
+
+
+	  var color=message.payloadString;
+
+	  console.log("color:"+color);
+
+	  var selected_polygon_style = {
+        strokeWidth: 5,
+        strokeColor: color,
+        fillColor:color
+        // add more styling key/value pairs as your need
+      };
+
+      var feature=myLayer.getFeatureByFid("way."+deviceID);
+      if (feature){
+        feature.style=selected_polygon_style;
+        myLayer.redraw();
+      }
+
+	}
+
+
+
+      function init(){
+          map = new OpenLayers.Map ("map", {
+          controls:[
+              new OpenLayers.Control.Navigation(),
+              new OpenLayers.Control.PanZoomBar(),
+              new OpenLayers.Control.LayerSwitcher(),
+              new OpenLayers.Control.Attribution()],
+              maxExtent: new OpenLayers.Bounds(-20037508.34,-20037508.34,20037508.34,20037508.34),
+              maxResolution: 156543.0399,
+              numZoomLevels: 19,
+              units: 'm',
+              projection: new OpenLayers.Projection("EPSG:900913"),
+              displayProjection: new OpenLayers.Projection("EPSG:4326")
+          } );
+
+          layerMapnik = new OpenLayers.Layer.OSM.Mapnik("Mapnik");
+          map.addLayer(layerMapnik);
+
+          var lonLat = new OpenLayers.LonLat(lon, lat)
+              .transform(new OpenLayers.Projection("EPSG:4326"), new OpenLayers.Projection("EPSG:900913"));
+
+          map.setCenter (lonLat, zoom);
+          myLayer = make_layer("http://overpass-api.de/api/interpreter?data=[timeout:1];node[shop=supermarket](bbox);out+skel;(way[shop=supermarket](bbox);node(w););out+skel;", "green");
+
+
+          map.addLayers([myLayer]);
+          //console.log("features:" + myLayer.getSource().getFeatures());
+
+
+	  var click = new OpenLayers.Control.Click(
+	      "http://overpass-api.de/api/interpreter?data="
+	          + "[timeout:5][out:popup(\"\";[shop=supermarket];\"name\";)];"
+	          + "(node(bbox);way(bbox););(._;<;);out;"
+		  + "&redirect=no&template=ids.popup", 0.0000001, map);
+
+          map.addControl(click);
+          click.activate();
+
+
+            // Create a client instance
+            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(80), "clientId");
+
+            // set callback handlers
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+
+            // connect the client
+            client.connect({onSuccess:onConnect});
+
+
+      }
+
+
+  </script>
+</head>
+<body onload="init()">
+  <div id="statusline" style="font-size:24pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
+  <div id="map" class="smallmap"></div>
+
+</body>
+</html>
+
+
