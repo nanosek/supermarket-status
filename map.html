@@ -90,7 +90,7 @@
               .transform(new OpenLayers.Projection("EPSG:4326"), new OpenLayers.Projection("EPSG:900913"));
 
           map.setCenter (lonLat, zoom);
-          myLayer = make_layer("http://overpass-api.de/api/interpreter?data=[timeout:1];node[shop=supermarket](bbox);out+skel;(way[shop=supermarket](bbox);node(w););out+skel;", "green");
+          myLayer = make_layer("https://overpass-api.de/api/interpreter?data=[timeout:1];node[shop=supermarket](bbox);out+skel;(way[shop=supermarket](bbox);node(w););out+skel;", "green");
 
 
           map.addLayers([myLayer]);
@@ -98,7 +98,7 @@
 
 
 	  var click = new OpenLayers.Control.Click(
-	      "http://overpass-api.de/api/interpreter?data="
+	      "https://overpass-api.de/api/interpreter?data="
 	          + "[timeout:5][out:popup(\"\";[shop=supermarket];\"name\";)];"
 	          + "(node(bbox);way(bbox););(._;<;);out;"
 		  + "&redirect=no&template=ids.popup", 0.0000001, map);
