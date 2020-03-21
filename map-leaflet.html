@@ -278,9 +278,10 @@ function layerClickHandler (e) {
         });
       });
 
-
+            var clientID=createClientID();
             // Create a client instance
-            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), createClientID());
+            console.log("used client id"+clientID);
+            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
 
             // set callback handlers
             client.onConnectionLost = onConnectionLost;
