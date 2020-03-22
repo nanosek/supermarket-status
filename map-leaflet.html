@@ -1,7 +1,7 @@
 <html>
 <head>
     <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=0.8, maximum-scale=0.8, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css"/>
     <style>
       body {
@@ -12,6 +12,11 @@
         height: 100%;
         width: 100%;
       }
+
+      #no-queue-button {
+        background-color: rgb(0, 255, 0);
+      }
+
       #overpass-api-controls {
         padding: 10px;
         background-color: rgb(255, 255, 255);
@@ -44,8 +49,8 @@
 
     var geojsonMarkerOptions = {
       radius: 50,
-      fillColor: "#ff7800",
-      color: "#000",
+      fillColor: "gray",
+      color: "gray",
       weight: 1,
       opacity: 1,
       fillOpacity: 0.8
@@ -70,9 +75,9 @@ var template = '<form id="popup-form">\
       <td id="value-opening-hours" class="popup-table-data"></td>\
     </tr>\
   </table>\
-  <button id="button-submit-short" type="button">No Queue</button>\
-  <button id="button-submit-medium" type="button">Short Queue</button>\
-  <button id="button-submit-long" type="button">Long Queue</button>\
+  <button id="button-submit-short" type="button" style="background-color: green">No Queue</button>\
+  <button id="button-submit-medium" type="button" style="background-color: orange" >Short Queue</button>\
+  <button id="button-submit-long" type="button" style="background-color: red">Long Queue</button>\
 </form>';
 
 	// called when the client connects
@@ -105,7 +110,17 @@ var template = '<form id="popup-form">\
             })
 
 	}
+function sendQueueLengthForID(featureID, length) {
+    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
+    console.log("sending to topic "+topic);
 
+    message = new Paho.MQTT.Message(length);
+    message.destinationName = topic;
+    message.retained=true;
+
+    client.send(message);
+
+}
 
 function layerClickHandler (e) {
 
@@ -128,43 +143,20 @@ function layerClickHandler (e) {
 
   L.DomEvent.addListener(buttonSubmitLong, 'click', function (e) {
     featureID=properties.id;
-    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
-    console.log("sending to topic "+topic);
-
-    message = new Paho.MQTT.Message("30");
-    message.destinationName = topic;
-    message.retained=true;
-
-    client.send(message);
-
+    sendQueueLengthForID(featureID,"30");
     marker.closePopup();
   });
 
   L.DomEvent.addListener(buttonSubmitShort, 'click', function (e) {
     featureID=properties.id;
-    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
-    console.log("sending to topic "+topic);
-
-    message = new Paho.MQTT.Message("0");
-    message.destinationName = topic;
-    message.retained=true;
-
-    client.send(message);
-
+    sendQueueLengthForID(featureID,"0");
     marker.closePopup();
   });
 
   L.DomEvent.addListener(buttonSubmitMedium, 'click', function (e) {
     featureID=properties.id;
-    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
-    console.log("sending to topic "+topic);
-
-    message = new Paho.MQTT.Message("10");
-    message.destinationName = topic;
-    message.retained=true;
-
+    sendQueueLengthForID(featureID,"10");
     client.send(message);
-
     marker.closePopup();
   });
 
@@ -179,7 +171,7 @@ function layerClickHandler (e) {
         if (feature.properties["color"]) {
          return {color: feature.properties["color"],fillColor:feature.properties["color"]};
         } else {
-         return {color: "green"};
+         return {color: "gray"};
         }
       }
 
@@ -229,10 +221,12 @@ function layerClickHandler (e) {
               map.removeLayer(resultLayer);
             }
             var queryTextfieldValue = $("#query-textfield").val();
+            setStatusText("loading data for "+ queryTextfieldValue);
             var overpassApiUrl = buildOverpassApiUrl(map, queryTextfieldValue);
 
             $.get(overpassApiUrl, function (osmDataAsJson) {
               var resultAsGeojson = osmtogeojson(osmDataAsJson);
+              setStatusText("got data! - Click on an object to report waiting-time!");
               resultLayer = L.geoJson(resultAsGeojson, {
                 style: styleFunction,
                 pointToLayer: function (feature, latlng) {
@@ -279,6 +273,15 @@ function layerClickHandler (e) {
 		alert(e.message);
 	}
 
+     function setStatusText(text) {
+          var html_node = document.getElementById("statusline");
+          if (html_node != null)
+          {
+                var div = html_node.firstChild;
+                div.deleteData(0, div.nodeValue.length);
+                div.appendData(text);
+          }
+     }
 
       function init() {
         map = L.map('map').setView([51.2585357,9.4491496], 14);
