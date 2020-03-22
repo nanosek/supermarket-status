@@ -1,8 +1,8 @@
 <html>
 <head>
-  <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
-   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css"/>
     <style>
       body {
         padding: 0;
@@ -19,17 +19,19 @@
       #overpass-api-controls a {
         display: inline;
       }
+
     </style>
 
-  <title>SuperMarket Queue Lenght Status Prototype</title>
+    <title>SuperMarket Queue Length Status Prototype</title>
 
-      <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
     <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
 
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
-  <script type="text/javascript">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
+            type="text/javascript"></script>
+    <script type="text/javascript">
       var lat = 51.0;
       var lon = 10.5;
       var zoom = 6;
@@ -41,7 +43,7 @@
 
 
     var geojsonMarkerOptions = {
-      radius: 8,
+      radius: 50,
       fillColor: "#ff7800",
       color: "#000",
       weight: 1,
@@ -58,16 +60,14 @@ function createClientID() {
 }
 
 var template = '<form id="popup-form">\
-  <label for="input-speed">New speed:</label>\
-  <input id="input-speed" class="popup-input" type="number" />\
   <table class="popup-table">\
     <tr class="popup-table-row">\
       <th class="popup-table-header">Name:</th>\
       <td id="value-name" class="popup-table-data"></td>\
     </tr>\
     <tr class="popup-table-row">\
-      <th class="popup-table-header">Current speed:</th>\
-      <td id="value-speed" class="popup-table-data"></td>\
+      <th class="popup-table-header">Öffnungszeiten (laut OSM):</th>\
+      <td id="value-opening-hours" class="popup-table-data"></td>\
     </tr>\
   </table>\
   <button id="button-submit-short" type="button">No Queue</button>\
@@ -120,13 +120,7 @@ function layerClickHandler (e) {
   marker.openPopup();
 
   L.DomUtil.get('value-name').textContent = properties.tags["name"];
-  L.DomUtil.get('value-speed').textContent = properties.speed;
-
-  var inputSpeed = L.DomUtil.get('input-speed');
-  inputSpeed.value = properties.speed;
-  L.DomEvent.addListener(inputSpeed, 'change', function (e) {
-    properties.speed = e.target.value;
-  });
+  L.DomUtil.get('value-opening-hours').textContent = properties.tags["opening_hours"];
 
   var buttonSubmitLong = L.DomUtil.get('button-submit-long');
   var buttonSubmitShort = L.DomUtil.get('button-submit-short');
@@ -134,10 +128,10 @@ function layerClickHandler (e) {
 
   L.DomEvent.addListener(buttonSubmitLong, 'click', function (e) {
     featureID=properties.id;
-    topic="de/hackathon/supermarkets/"+featureID+"/color";
+    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
     console.log("sending to topic "+topic);
 
-    message = new Paho.MQTT.Message("#FF0000");
+    message = new Paho.MQTT.Message("30");
     message.destinationName = topic;
     message.retained=true;
 
@@ -148,10 +142,10 @@ function layerClickHandler (e) {
 
   L.DomEvent.addListener(buttonSubmitShort, 'click', function (e) {
     featureID=properties.id;
-    topic="de/hackathon/supermarkets/"+featureID+"/color";
+    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
     console.log("sending to topic "+topic);
 
-    message = new Paho.MQTT.Message("#00FF00");
+    message = new Paho.MQTT.Message("0");
     message.destinationName = topic;
     message.retained=true;
 
@@ -162,10 +156,10 @@ function layerClickHandler (e) {
 
   L.DomEvent.addListener(buttonSubmitMedium, 'click', function (e) {
     featureID=properties.id;
-    topic="de/hackathon/supermarkets/"+featureID+"/color";
+    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
     console.log("sending to topic "+topic);
 
-    message = new Paho.MQTT.Message("#00FFFF");
+    message = new Paho.MQTT.Message("10");
     message.destinationName = topic;
     message.retained=true;
 
@@ -183,7 +177,7 @@ function layerClickHandler (e) {
         console.log("feature style:" + feature.properties);
         console.log("color map:"+colorMap[feature.properties["color"]])
         if (feature.properties["color"]) {
-         return {color: feature.properties["color"]};
+         return {color: feature.properties["color"],fillColor:feature.properties["color"]};
         } else {
          return {color: "green"};
         }
@@ -197,16 +191,17 @@ function layerClickHandler (e) {
 	  console.log("deviceID:"+deviceID);
 
 
-	  var color=message.payloadString;
+	  var color="#7F7F7F";
+	  if (message.payloadString == "0")
+	    color="green";
+	  if (message.payloadString == "10")
+	    color="orange";
+	  if (message.payloadString == "30")
+	    color="red";
+
+	  //if
 
 	  console.log("color:"+color);
-
-	  var selected_polygon_style = {
-        strokeWidth: 5,
-        strokeColor: color,
-        fillColor:color
-        // add more styling key/value pairs as your need
-      };
 
       var feature=topics[message.destinationName];
       if (feature){
@@ -214,15 +209,6 @@ function layerClickHandler (e) {
         resultLayer.setStyle(styleFunction);
       }
 	}
-
-
-
-      function init(){
-      map = L.map('map').setView([51.2585357,9.4491496], 14);
-      L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 18,
-        attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
-      }).addTo(map);
 
 
       function buildOverpassApiUrl(map, overpassQuery) {
@@ -236,80 +222,111 @@ function layerClickHandler (e) {
         return resultUrl;
       }
 
-      $("#query-button").click(function () {
-        topics={};
-        if (resultLayer) {
-          map.removeLayer(resultLayer);
-        }
-        var queryTextfieldValue = $("#query-textfield").val();
-        var overpassApiUrl = buildOverpassApiUrl(map, queryTextfieldValue);
+      function loadData() {
 
-        $.get(overpassApiUrl, function (osmDataAsJson) {
-          var resultAsGeojson = osmtogeojson(osmDataAsJson);
-          resultLayer = L.geoJson(resultAsGeojson, {
-            style: styleFunction,
-            pointToLayer: function (feature, latlng) {
-              return L.circleMarker(latlng, geojsonMarkerOptions);
-             },
-            filter: function (feature, layer) {
-              console.log(feature);
-              var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
-              var isPoint = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Point");
-              //isPolygon = false;
-              if (isPoint) {
-                //feature.geometry.type = "LineString";
-                //var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
-                //feature.geometry.coordinates = [ polygonCenter.lat, polygonCenter.lng ];
-              }
-              return true;
-            },
-            onEachFeature: function (feature, layer) {
-              console.log("feature:" + feature.id);
-              featureID=feature.properties.id;
-              topic="de/hackathon/supermarkets/"+featureID+"/color";
-              topics[topic] = feature;
-              layer.on('click',layerClickHandler);
+            topics={};
+            if (resultLayer) {
+              map.removeLayer(resultLayer);
             }
-          }).addTo(map);
-          //map.on('click',onMapClick);
-          if (client.isConnected())
-            client.disconnect();
+            var queryTextfieldValue = $("#query-textfield").val();
+            var overpassApiUrl = buildOverpassApiUrl(map, queryTextfieldValue);
 
-        });
-      });
+            $.get(overpassApiUrl, function (osmDataAsJson) {
+              var resultAsGeojson = osmtogeojson(osmDataAsJson);
+              resultLayer = L.geoJson(resultAsGeojson, {
+                style: styleFunction,
+                pointToLayer: function (feature, latlng) {
+                  //return L.circleMarker(latlng, geojsonMarkerOptions);
+                  return L.circle(latlng, geojsonMarkerOptions); //circle size changes if you zoom in
+                 },
+                filter: function (feature, layer) {
+                  console.log(feature);
+                  var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
+                  var isPoint = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Point");
+                  //isPolygon = false;
+                  if (isPoint) {
+                    //feature.geometry.type = "LineString";
+                    //var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
+                    //feature.geometry.coordinates = [ polygonCenter.lat, polygonCenter.lng ];
+                  }
+                  return true;
+                },
+                onEachFeature: function (feature, layer) {
+                  console.log("feature:" + feature.id);
+                  featureID=feature.properties.id;
+                  topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
+                  topics[topic] = feature;
+                  layer.on('click',layerClickHandler);
+                }
+              }).addTo(map);
+              //map.on('click',onMapClick);
+              if (client.isConnected())
+                client.disconnect();
 
-            var clientID=createClientID();
-            // Create a client instance
-            console.log("used client id"+clientID);
-            client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
+            });
 
-            // set callback handlers
-            client.onConnectionLost = onConnectionLost;
-            client.onMessageArrived = onMessageArrived;
+      }
 
-            // connect the client
-            client.connect(
-            {onSuccess:onConnect,
-            useSSL:true
+	function onLocationFound(e) {
+		var radius = e.accuracy / 2;
+
+		L.marker(e.latlng).addTo(map).bindPopup("Dein Standort ("+radius+" meter radius)");
+
+		//L.circle(e.latlng, radius).addTo(map);
+	}
+
+	function onLocationError(e) {
+		alert(e.message);
+	}
+
+
+      function init() {
+        map = L.map('map').setView([51.2585357,9.4491496], 14);
+        L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
+        }).addTo(map);
+
+        $("#query-button").click(loadData);
+        map.on('moveend',loadData);
+    	map.on('locationfound', onLocationFound);
+	    map.on('locationerror', onLocationError);
+
+        map.locate({setView: true, maxZoom: 16});
+        var clientID=createClientID();
+        // Create a client instance
+        console.log("used client id"+clientID);
+        client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
+
+        // set callback handlers
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        // connect the client
+        client.connect(
+            {
+                onSuccess:onConnect,
+                useSSL:true
             }
-            );
+        );
       }
 
 
-  </script>
+
+    </script>
 </head>
 <body onload="init()">
-  <div id="statusline" style="font-size:24pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
-  <div id="map" class="smallmap">
+<div id="statusline" style="font-size:24pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
+<div id="map" class="smallmap">
     <div class="leaflet-control-container">
         <div class="leaflet-top leaflet-right">
-          <div id="overpass-api-controls" class="leaflet-bar leaflet-control">
-            <input id="query-textfield" value="shop=supermarket" size="50">
-            <input id="query-button" type="button" value="Laden">
-          </div>
+            <div id="overpass-api-controls" class="leaflet-bar leaflet-control">
+                <input id="query-textfield" value="shop=supermarket" size="30">
+                <input id="query-button" type="button" value="Laden">
+            </div>
         </div>
-      </div>
-  </div>
+    </div>
+</div>
 
 </body>
 </html>
