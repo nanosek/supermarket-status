@@ -215,6 +215,10 @@ function layerClickHandler (e) {
       }
 
       function loadData() {
+            if (map.getZoom()<14) {
+              setStatusText("reinzoomen um daten zu laden/zoom in to load data. " +map.getZoom());
+              return;
+            }
 
             topics={};
             if (resultLayer) {
