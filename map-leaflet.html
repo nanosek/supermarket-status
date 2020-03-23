@@ -355,10 +355,44 @@ function layerClickHandler (e) {
      }
 
       function init() {
-        map = L.map('map').setView([51.2585357,9.4491496], 14);
+
+        var urlParams = new URLSearchParams(window.location.search);
+
+        console.log(urlParams.has('lat')); // true
+        console.log(urlParams.has('lng')); // true
+        console.log(urlParams.has('query')); // true
+        console.log(urlParams.get('lat')); // "edit"
+        console.log(urlParams.get('lng')); // "edit"
+        console.log(urlParams.get('query')); // "edit"
+
+
+        //console.log(urlParams.getAll('action')); // ["edit"]
+        //console.log(urlParams.toString()); // "?post=1234&action=edit"
+        //console.log(urlParams.append('active', '1')); // "?post=1234&action=edit&active=1"
+
+
+
+        var initialLat=51.2585357;
+        var initialLng=9.4491496;
+        var askForLocation=true;
+
+        //mechanism to point the map to a different location and prevent the system from asking for browser loc
+        if (urlParams.has('lat') && urlParams.has('lng')){
+          initialLat=urlParams.get('lat');
+          initialLng=urlParams.get('lng');
+          askForLocation=false;
+        }
+
+        //query parameter to change the default search query
+        if (urlParams.has('query')){
+            var inputF = document.getElementById("query-textfield");
+            inputF.value = urlParams.get('query');
+        }
+
+        map = L.map('map').setView([initialLat,initialLng], 14);
         L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
-            minZoom: 10,
+            minZoom: 6,
             attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
         }).addTo(map);
 
@@ -367,7 +401,12 @@ function layerClickHandler (e) {
     	map.on('locationfound', onLocationFound);
 	    map.on('locationerror', onLocationError);
 
-        map.locate({setView: true, maxZoom: 16});
+        if (askForLocation) {
+            map.locate({setView: true, maxZoom: 16});
+        } else {
+            loadData();
+        }
+
         var clientID=createClientID();
         // Create a client instance
         console.log("used client id"+clientID);
