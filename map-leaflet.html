@@ -166,8 +166,8 @@ function layerClickHandler (e) {
 }
 
       function styleFunction(feature) {
-        console.log("feature style:" + feature.properties);
-        console.log("color map:"+colorMap[feature.properties["color"]])
+        //console.log("feature style:" + feature.properties);
+        //console.log("color map:"+colorMap[feature.properties["color"]])
         if (feature.properties["color"]) {
          return {color: feature.properties["color"],fillColor:feature.properties["color"]};
         } else {
@@ -256,7 +256,10 @@ function layerClickHandler (e) {
                   topics[topic] = feature;
                   layer.on('click',layerClickHandler);
                 }
-              }).addTo(map);
+              }).bindTooltip(function (layer) {
+		        feature=layer.feature;
+		        return String(feature.properties.tags.name); // Needs to be a string
+	          }).addTo(map);
               //map.on('click',onMapClick);
               if (client.isConnected())
                 client.disconnect();
@@ -291,6 +294,7 @@ function layerClickHandler (e) {
         map = L.map('map').setView([51.2585357,9.4491496], 14);
         L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
+            minZoom: 10,
             attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
         }).addTo(map);
 
