@@ -37,6 +37,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
             type="text/javascript"></script>
     <script type="text/javascript">
+
+      //this should isolate topics of different github clone projects and protect us a bit against different formats from different pages
+      var mqttDefaultTopic="de/wirvsvirus/"+window.location.hostname + window.location.pathname;
+
       var lat = 51.0;
       var lon = 10.5;
       var zoom = 6;
@@ -110,17 +114,7 @@ var template = '<form id="popup-form">\
             })
 
 	}
-function sendQueueLengthForID(featureID, length) {
-    topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
-    console.log("sending to topic "+topic);
 
-    message = new Paho.MQTT.Message(length);
-    message.destinationName = topic;
-    message.retained=true;
-
-    client.send(message);
-
-}
 
 function layerClickHandler (e) {
 
@@ -175,29 +169,85 @@ function layerClickHandler (e) {
         }
       }
 
+    function sendQueueLengthForID(featureID, length) {
+        topic=mqttDefaultTopic+"/osmid/"+featureID+"/queueLength";
+        console.log("sending to topic "+topic);
+        messageToSend={};
+        messageToSend["ts"]=Math.round(Date.now()/1000);
+        messageToSend["value"]=length;
+
+        message = new Paho.MQTT.Message(JSON.stringify(messageToSend));
+        message.destinationName = topic;
+        message.retained=true;
+
+        client.send(message);
+
+    }
+
 	// called when a message arrives
 	function onMessageArrived(message) {
 	  console.log("onMessageArrived:"+message.destinationName+": "+message.payloadString);
 	  var topic=message.destinationName.split("/");
 	  var deviceID=topic[3];
-	  console.log("deviceID:"+deviceID);
+	  console.log("osm-id:"+deviceID);
+      var value;
+      var ts;
+      var dataAgeInMinutes;
+      try {
+        var myObj = JSON.parse(message.payloadString);
+     	if (typeof myObj == "number") {
+          value=myObj;
+	    } else {
+          ts=myObj["ts"];
+          value=myObj["value"];
+
+	    }
+      } catch (ex) {
+        console.log("unable to parse json: "+ex);
+        value = message.payloadString;
+      }
 
 
-	  var color="#7F7F7F";
-	  if (message.payloadString == "0")
-	    color="green";
-	  if (message.payloadString == "10")
-	    color="orange";
-	  if (message.payloadString == "30")
-	    color="red";
+      if (ts) {
+         console.log("ts: "+new Date(ts*1000));
+         dataAgeInMinutes=((Date.now()/1000) - ts) / 60;
+      } else {
+         console.log("ts unknown");
+      }
 
-	  //if
+	  var color="#7F7F7F"; //unknown gray
+      if (typeof value != "number") {
+        value = Number(value);
+      }
+
+      var statusTextForTooltip=""; //careful, this is rendered as html - no direct external data here that can be used for XSS....
+
+      if (dataAgeInMinutes < 180) {
+          if (value == 0){
+            color="green";
+            statusTextForToolTip="fine! not crowded, no queues!";
+          } else if (value <= 10) {
+            color="orange";
+            statusTextForToolTip="ok! but some waiting time / a bit crowded";
+          } else if (value > 10) {
+            color="red";
+            statusTextForToolTip="crowded place!";
+          }
+      } else {
+         color =  "#AFAFAF"; //outdated
+      }
+
+
+
+
 
 	  console.log("color:"+color);
 
       var feature=topics[message.destinationName];
       if (feature){
         feature.properties["color"]=color;
+        feature.properties["data-age"]=dataAgeInMinutes;
+        feature.properties["data-rendered-value"] = statusTextForToolTip;
         resultLayer.setStyle(styleFunction);
       }
 	}
@@ -252,13 +302,26 @@ function layerClickHandler (e) {
                 onEachFeature: function (feature, layer) {
                   console.log("feature:" + feature.id);
                   featureID=feature.properties.id;
-                  topic="de/hackathon/supermarkets/"+featureID+"/queueLength";
+                  topic=mqttDefaultTopic+"/osmid/"+featureID+"/queueLength";
                   topics[topic] = feature;
                   layer.on('click',layerClickHandler);
                 }
               }).bindTooltip(function (layer) {
 		        feature=layer.feature;
-		        return String(feature.properties.tags.name); // Needs to be a string
+		        dataAge=feature.properties["data-age"];
+		        dataValue=feature.properties["data-rendered-value"]
+		        if (!dataAge){
+		         dataAge="unknown";
+		        } else {
+		         dataAge=Math.round(dataAge);
+		        }
+                var tooltipText;
+                if (dataValue) {
+                  tooltipText=feature.properties.tags.name+"<br>" +dataValue + "<br>("+dataAge+" minutes old)<br>click to report new status";
+		        } else {
+		          tooltipText=feature.properties.tags.name+"<br>no value reported yet!<br>be the first and click to report new status!";
+		        }
+		        return String(tooltipText); // Needs to be a string
 	          }).addTo(map);
               //map.on('click',onMapClick);
               if (client.isConnected())
@@ -317,6 +380,7 @@ function layerClickHandler (e) {
         client.connect(
             {
                 onSuccess:onConnect,
+                keepAliveInterval: 30,
                 useSSL:true
             }
         );
