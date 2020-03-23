@@ -98,8 +98,8 @@ var template = '<form id="popup-form">\
         //use key and value here
       });
 
-	  message = new Paho.MQTT.Message("Hello");
-	  message.destinationName = "World";
+	  message = new Paho.MQTT.Message(""+Math.round(Date.now()/1000));
+	  message.destinationName = mqttDefaultTopic+"/client-heartbeat";
 	  client.send(message);
 	}
 
@@ -188,7 +188,8 @@ function layerClickHandler (e) {
 	function onMessageArrived(message) {
 	  console.log("onMessageArrived:"+message.destinationName+": "+message.payloadString);
 	  var topic=message.destinationName.split("/");
-	  var deviceID=topic[3];
+	  var prefixCounter=mqttDefaultTopic.split("/").length;
+	  var deviceID=topic[prefixCounter+1];
 	  console.log("osm-id:"+deviceID);
       var value;
       var ts;
