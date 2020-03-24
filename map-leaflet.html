@@ -226,13 +226,13 @@ function layerClickHandler (e) {
       if (dataAgeInMinutes < 180) {
           if (value == 0){
             color="green";
-            statusTextForToolTip="fine! not crowded, no queues!";
+            statusTextForTooltip="fine! not crowded, no queues!";
           } else if (value <= 10) {
             color="orange";
-            statusTextForToolTip="ok! but some waiting time / a bit crowded";
+            statusTextForTooltip="ok! but some waiting time / a bit crowded";
           } else if (value > 10) {
             color="red";
-            statusTextForToolTip="crowded place!";
+            statusTextForTooltip="crowded place!";
           }
       } else {
          color =  "#AFAFAF"; //outdated
@@ -248,7 +248,9 @@ function layerClickHandler (e) {
       if (feature){
         feature.properties["color"]=color;
         feature.properties["data-age"]=dataAgeInMinutes;
-        feature.properties["data-rendered-value"] = statusTextForToolTip;
+        if (statusTextForTooltip != "") {
+            feature.properties["data-rendered-value"] = statusTextForTooltip;
+        }
         resultLayer.setStyle(styleFunction);
       }
 	}
