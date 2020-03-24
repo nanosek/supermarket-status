@@ -1,16 +1,16 @@
 <html>
 <head>
     <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
-    <meta name="viewport" content="width=device-width, initial-scale=0.8, maximum-scale=0.8, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css"/>
     <style>
       body {
-        padding: 0;
+        padding: 10;
         margin: 0;
       }
       html, body, #map {
-        height: 100%;
-        width: 100%;
+        height: 90%;
+        width: 96%;
       }
 
       #no-queue-button {
@@ -108,10 +108,11 @@ var template = '<form id="popup-form">\
 	  if (responseObject.errorCode !== 0) {
 	    console.log("onConnectionLost:"+responseObject.errorMessage);
 	  }
+     //client.getTraceLog().forEach(function(line){
+     //   console.log('Trace: ' + line)
+     //   });
 
-     client.connect({onSuccess:onConnect,
-            useSSL:true
-            })
+     connectMqttClient();
 
 	}
 
@@ -125,7 +126,7 @@ function layerClickHandler (e) {
     marker.unbindPopup();
   }
 
-  marker.bindPopup(template);
+  marker.bindPopup(template,{autoPan: false});
   marker.openPopup();
 
   L.DomUtil.get('value-name').textContent = properties.tags["name"];
@@ -355,6 +356,15 @@ function layerClickHandler (e) {
                 div.appendData(text);
           }
      }
+     function connectMqttClient() {
+         client.connect(
+                {
+                    onSuccess:onConnect,
+                    keepAliveInterval: 30,
+                    useSSL:true
+                }
+            );
+     }
 
       function init() {
 
@@ -417,15 +427,10 @@ function layerClickHandler (e) {
         // set callback handlers
         client.onConnectionLost = onConnectionLost;
         client.onMessageArrived = onMessageArrived;
+        //client.startTrace();
 
         // connect the client
-        client.connect(
-            {
-                onSuccess:onConnect,
-                keepAliveInterval: 30,
-                useSSL:true
-            }
-        );
+        connectMqttClient();
       }
 
 
@@ -433,7 +438,7 @@ function layerClickHandler (e) {
     </script>
 </head>
 <body onload="init()">
-<div id="statusline" style="font-size:24pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
+
 <div id="map" class="smallmap">
     <div class="leaflet-control-container">
         <div class="leaflet-top leaflet-right">
@@ -443,6 +448,16 @@ function layerClickHandler (e) {
             </div>
         </div>
     </div>
+</div>
+<div id="statusline" style="font-size:12pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
+
+<div id="footer">
+    This is a mashup prototype for a crowd sourcing "waiting time before a supermarket" map - it is functional,
+    but obviously of not in production quality. It was created as a fun/learning project as part of the #WirvsVirus hackathon in 2020.
+
+    There is no real server backend for this solution - this page is using the public available MQTT Server mqtt.eclipse.org to publish
+    your reported status and the nice Overpass API to get the list of supermarkets from the OpenStreetmap data.
+
 </div>
 
 </body>
