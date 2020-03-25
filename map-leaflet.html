@@ -490,6 +490,15 @@
       });
     }
 
+    function hideInfo() {
+      var x = document.getElementById("info");
+      if (x.style.display === "none") {
+        x.style.display = "block";
+      } else {
+        x.style.display = "none";
+      }
+    }
+
     function init() {
 
       urlParams = new URLSearchParams(window.location.search);
@@ -544,6 +553,9 @@
 
       if (urlParams.has("markerSizeFactor")){
         markerSizeFactor=Number(urlParams.get("markerSizeFactor"));
+      }
+      if (urlParams.has("hideInfo")){
+        hideInfo();
       }
       
 
@@ -608,18 +620,20 @@
   </div>
   <div id="statusline" style="font-size:12pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
 
-  <div id="footer">
+  <div id="info">
     This is a mashup prototype for a crowd sourcing "waiting time before a supermarket" map - it is functional,
     but obviously of not in production quality. <br>
     <b>There is absolutely no quality control - neither for the rendered data nor for the code.</b>
     <br>
     It was created as a fun/learning project as part of the #WirvsVirus hackathon in 2020. 
-
+    <br>
     There is no real server backend for this solution - this page is using the public available MQTT Server
     mqtt.eclipse.org to publish your reported data/status and the nice Overpass API to get the list of supermarkets from the OpenStreetmap data.
-    <br>
-    <b>Disclaimer: The rendered data can be easily manipulated by anybody on the internet, nobody is taking any liability! - so do not count on it for anything important!</b>
+    <br><br>
+  </div>
 
+  <div id="footer">
+    <b>Disclaimer: This is a fun project! The rendered data can be easily manipulated by anybody on the internet, nobody is taking any liability! - so do not count on it for anything important!</b>
   </div>
 
 </body>
