@@ -1,12 +1,14 @@
-## Welcome to GitHub Pages
+# Is is busy? 
+This is a prototype of an OpenStreetmap Mashup to show the current "waiting queue" length
 
-You can use the [editor on GitHub](https://github.com/nanosek/supermarket-status/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+### How does it work?
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
-
-### Markdown
-
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+Almost everything runs in your browser via JavaScript, there is no dedicated server that belongs to this mashup.
+Three external servers are being used (their public APIs are being queried by your browser):
+- OpenStreetMap to get the map tiles (the map background)
+- wss://mqtt.eclipse.org to fetch the reported status that others have published
+- overpass-api.de/api/interpreter to get the actual data where the elements that you are interested are located
+ 
 
 ```markdown
 Syntax highlighted code block

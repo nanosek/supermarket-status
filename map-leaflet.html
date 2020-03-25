@@ -1,74 +1,85 @@
 <html>
+
 <head>
-    <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en"></meta>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css"/>
-    <style>
-      body {
-        padding: 10;
-        margin: 0;
-      }
-      html, body, #map {
-        height: 90%;
-        width: 96%;
-      }
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" lang="en">
+  </meta>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
+  <style>
+    body {
+      padding: 10;
+      margin: 0;
+    }
 
-      #no-queue-button {
-        background-color: rgb(0, 255, 0);
-      }
+    html,
+    body,
+    #map {
+      height: 90%;
+      width: 96%;
+    }
 
-      #overpass-api-controls {
-        padding: 10px;
-        background-color: rgb(255, 255, 255);
-      }
-      #overpass-api-controls a {
-        display: inline;
-      }
+    #no-queue-button {
+      background-color: rgb(0, 255, 0);
+    }
 
-    </style>
+    #overpass-api-controls {
+      padding: 10px;
+      background-color: rgb(255, 255, 255);
+    }
 
-    <title>SuperMarket Queue Length Status Prototype</title>
+    #overpass-api-controls a {
+      display: inline;
+    }
+  </style>
 
-    <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+  <title>SuperMarket Queue Length Status Prototype</title>
+
+  <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
 
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
-            type="text/javascript"></script>
-    <script type="text/javascript">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+  <script type="text/javascript">
+    //this should isolate topics of different github clone projects and protect us a bit against different formats from different pages
+    var mqttDefaultTopic = "de/wirvsvirus/" + window.location.hostname + window.location.pathname;
 
-      //this should isolate topics of different github clone projects and protect us a bit against different formats from different pages
-      var mqttDefaultTopic="de/wirvsvirus/"+window.location.hostname + window.location.pathname;
+    var lat = 51.0;
+    var lon = 10.5;
+    var zoom = 6;
+    var map;
+    var resultLayer;
+    var client;
+    var topics = {};
+    var colorMap = {};
+    var urlParams;
+    var loadedBounds;
 
-      var lat = 51.0;
-      var lon = 10.5;
-      var zoom = 6;
-      var map;
-      var resultLayer;
-      var client;
-      var topics={};
-      var colorMap={};
+    var simulatedData=false;
+    var markerSizeFactor=1;
+
+    var usedUnknownColor="gray";
 
 
     var geojsonMarkerOptions = {
-      radius: 50,
-      fillColor: "gray",
-      color: "gray",
+      radius: 20*markerSizeFactor,
+      fillColor: usedUnknownColor,
+      color: usedUnknownColor,
       weight: 1,
-      opacity: 1,
+      opacity: 0.2,
       fillOpacity: 0.8
     };
 
 
-function createClientID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+    function createClientID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0,
+          v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
-    });
-}
+      });
+    }
 
-var template = '<form id="popup-form">\
+    var template = '<form id="popup-form">\
   <table class="popup-table">\
     <tr class="popup-table-row">\
       <th class="popup-table-header">Name:</th>\
@@ -79,388 +90,538 @@ var template = '<form id="popup-form">\
       <td id="value-opening-hours" class="popup-table-data"></td>\
     </tr>\
   </table>\
-  <button id="button-submit-short" type="button" style="background-color: green">No Queue</button>\
-  <button id="button-submit-medium" type="button" style="background-color: orange" >Short Queue</button>\
   <button id="button-submit-long" type="button" style="background-color: red">Long Queue</button>\
+  <button id="button-submit-medium" type="button" style="background-color: orange" >Short Queue</button>\
+  <button id="button-submit-short" type="button" style="background-color: green">No Queue</button>\
 </form>';
 
-	// called when the client connects
-	function onConnect() {
-	  // Once a connection has been made, make a subscription and send a message.
-	  console.log("onConnect");
+    // called when the client connects
+    function onConnect() {
+      // Once a connection has been made, make a subscription and send a message.
+      console.log("onConnect");
 
       Object.entries(topics).forEach(entry => {
         let key = entry[0];
         let value = entry[1];
-        console.log("subscribing to: "+key);
+        console.log("subscribing to: " + key);
         client.subscribe(key);
 
         //use key and value here
       });
 
-	  message = new Paho.MQTT.Message(""+Math.round(Date.now()/1000));
-	  message.destinationName = mqttDefaultTopic+"/client-heartbeat";
-	  client.send(message);
-	}
+      message = new Paho.MQTT.Message("" + Math.round(Date.now() / 1000));
+      message.destinationName = mqttDefaultTopic + "/client-heartbeat";
+      client.send(message);
+    }
 
-	// called when the client loses its connection
-	function onConnectionLost(responseObject) {
-	  if (responseObject.errorCode !== 0) {
-	    console.log("onConnectionLost:"+responseObject.errorMessage);
-	  }
-     //client.getTraceLog().forEach(function(line){
-     //   console.log('Trace: ' + line)
-     //   });
-
-     connectMqttClient();
-
-	}
-
-
-function layerClickHandler (e) {
-
-  var marker = e.target,
-      properties = e.target.feature.properties;
-
-  if (marker.hasOwnProperty('_popup')) {
-    marker.unbindPopup();
-  }
-
-  marker.bindPopup(template,{autoPan: false});
-  marker.openPopup();
-
-  L.DomUtil.get('value-name').textContent = properties.tags["name"];
-  L.DomUtil.get('value-opening-hours').textContent = properties.tags["opening_hours"];
-
-  var buttonSubmitLong = L.DomUtil.get('button-submit-long');
-  var buttonSubmitShort = L.DomUtil.get('button-submit-short');
-  var buttonSubmitMedium = L.DomUtil.get('button-submit-medium');
-
-  L.DomEvent.addListener(buttonSubmitLong, 'click', function (e) {
-    featureID=properties.id;
-    sendQueueLengthForID(featureID,"30");
-    marker.closePopup();
-  });
-
-  L.DomEvent.addListener(buttonSubmitShort, 'click', function (e) {
-    featureID=properties.id;
-    sendQueueLengthForID(featureID,"0");
-    marker.closePopup();
-  });
-
-  L.DomEvent.addListener(buttonSubmitMedium, 'click', function (e) {
-    featureID=properties.id;
-    sendQueueLengthForID(featureID,"10");
-    client.send(message);
-    marker.closePopup();
-  });
-
-
-
-
-}
-
-      function styleFunction(feature) {
-        //console.log("feature style:" + feature.properties);
-        //console.log("color map:"+colorMap[feature.properties["color"]])
-        if (feature.properties["color"]) {
-         return {color: feature.properties["color"],fillColor:feature.properties["color"]};
-        } else {
-         return {color: "gray"};
-        }
+    // called when the client loses its connection
+    function onConnectionLost(responseObject) {
+      if (responseObject.errorCode !== 0) {
+        console.log("onConnectionLost:" + responseObject.errorMessage);
       }
+      //client.getTraceLog().forEach(function(line){
+      //   console.log('Trace: ' + line)
+      //   });
 
-    function sendQueueLengthForID(featureID, length) {
-        topic=mqttDefaultTopic+"/osmid/"+featureID+"/queueLength";
-        console.log("sending to topic "+topic);
-        messageToSend={};
-        messageToSend["ts"]=Math.round(Date.now()/1000);
-        messageToSend["value"]=length;
-
-        message = new Paho.MQTT.Message(JSON.stringify(messageToSend));
-        message.destinationName = topic;
-        message.retained=true;
-
-        client.send(message);
+      connectMqttClient();
 
     }
 
-	// called when a message arrives
-	function onMessageArrived(message) {
-	  console.log("onMessageArrived:"+message.destinationName+": "+message.payloadString);
-	  var topic=message.destinationName.split("/");
-	  var prefixCounter=mqttDefaultTopic.split("/").length;
-	  var deviceID=topic[prefixCounter+1];
-	  console.log("osm-id:"+deviceID);
+
+    function layerClickHandler(e) {
+
+      var marker = e.target,
+        properties = e.target.feature.properties;
+
+      if (marker.hasOwnProperty('_popup')) {
+        marker.unbindPopup();
+      }
+
+      marker.bindPopup(template, {
+        autoPan: false
+      });
+      marker.openPopup();
+
+      L.DomUtil.get('value-name').textContent = properties.tags["name"];
+      L.DomUtil.get('value-opening-hours').textContent = properties.tags["opening_hours"];
+
+      var buttonSubmitShort = L.DomUtil.get('button-submit-short');
+      var buttonSubmitMedium = L.DomUtil.get('button-submit-medium');
+      var buttonSubmitLong = L.DomUtil.get('button-submit-long');
+
+      L.DomEvent.addListener(buttonSubmitShort, 'click', function (e) {
+        featureID = properties.id;
+        sendValueForID(featureID, "0");
+        marker.closePopup();
+      });
+
+
+      L.DomEvent.addListener(buttonSubmitMedium, 'click', function (e) {
+        featureID = properties.id;
+        sendValueForID(featureID, "10");
+        client.send(message);
+        marker.closePopup();
+      });
+
+      L.DomEvent.addListener(buttonSubmitLong, 'click', function (e) {
+        featureID = properties.id;
+        sendValueForID(featureID, "30");
+        marker.closePopup();
+      });
+
+
+
+
+    }
+
+    function getUnknownColorForFeature(feature,latlng) {
+      if (!simulatedData){
+        return usedUnknownColor;
+      }
+
+      //if (Math.random()<0.1)
+      //  return "green";
+
+      if (latlng){
+        lat=latlng.lat;
+        lng=latlng.lng;
+        v1=lat-Math.round(lat);
+        v2=lng-Math.round(lng);
+        v3=10*Math.abs(2*Math.PI*(v1*v2));
+
+
+        result=Math.abs(Math.cos(v3));
+        
+
+        console.log("v1:"+v1+" v2:"+v2+" v3:"+v3+" r:"+result);
+        if (result>=0.8){
+          return "red";
+        } else if (result >0.4){
+          return "yellow";
+        } 
+        return "green";
+
+
+      }
+      return usedUnknownColor;
+    }
+
+    function styleFunction(feature) {
+      //console.log("feature style:" +feature.latlng + feature.properties);
+      //console.log("color map:"+colorMap[feature.properties["color"]])
+      if (feature.properties["color"]) {
+        return {
+          color: feature.properties["color"],
+          fillColor: feature.properties["color"],
+          fillOpacity: 1        };
+      } else {
+        if (feature.geometry.type=="Point")
+          center = feature.geometry.coordinates;
+        else {
+          bounds=L.latLngBounds(feature.geometry.coordinates[0])
+          if (bounds && bounds.isValid()){
+            try {
+              center=bounds.getCenter();
+            } catch (ex) {
+              console.log(ex);
+            }
+            
+          } else {
+            console.log("strange coordinates! "+feature.geometry.coordinates);
+          }
+          
+        }
+          
+        
+        color2=getUnknownColorForFeature(feature,center);
+        return {
+          color: color2
+        };
+      }
+    }
+
+    function sendValueForID(featureID, length) {
+      topic = mqttDefaultTopic + "/osmid/" + featureID + "/queueLength";
+      console.log("sending to topic " + topic);
+      messageToSend = {};
+      messageToSend["ts"] = Math.round(Date.now() / 1000);
+      messageToSend["value"] = length;
+
+      message = new Paho.MQTT.Message(JSON.stringify(messageToSend));
+      message.destinationName = topic;
+      message.retained = true;
+
+      client.send(message);
+
+    }
+
+    // called when a message arrives
+    function onMessageArrived(message) {
+      console.log("onMessageArrived:" + message.destinationName + ": " + message.payloadString);
+      var topic = message.destinationName.split("/");
+      var prefixCounter = mqttDefaultTopic.split("/").length;
+      var deviceID = topic[prefixCounter + 1];
+      console.log("osm-id:" + deviceID);
       var value;
       var ts;
       var dataAgeInMinutes;
       try {
         var myObj = JSON.parse(message.payloadString);
-     	if (typeof myObj == "number") {
-          value=myObj;
-	    } else {
-          ts=myObj["ts"];
-          value=myObj["value"];
+        if (typeof myObj == "number") {
+          value = myObj;
+        } else {
+          ts = myObj["ts"];
+          value = myObj["value"];
 
-	    }
+        }
       } catch (ex) {
-        console.log("unable to parse json: "+ex);
+        console.log("unable to parse json: " + ex);
         value = message.payloadString;
       }
 
 
       if (ts) {
-         console.log("ts: "+new Date(ts*1000));
-         dataAgeInMinutes=((Date.now()/1000) - ts) / 60;
+        console.log("ts: " + new Date(ts * 1000));
+        dataAgeInMinutes = ((Date.now() / 1000) - ts) / 60;
       } else {
-         console.log("ts unknown");
+        console.log("ts unknown");
       }
 
-	  var color="#7F7F7F"; //unknown gray
+      var color = "#7F7F7F"; //unknown gray
       if (typeof value != "number") {
         value = Number(value);
       }
 
-      var statusTextForTooltip=""; //careful, this is rendered as html - no direct external data here that can be used for XSS....
+      var statusTextForTooltip =
+      ""; //careful, this is rendered as html - no direct external data here that can be used for XSS....
 
       if (dataAgeInMinutes < 180) {
-          if (value == 0){
-            color="green";
-            statusTextForTooltip="fine! not crowded, no queues!";
-          } else if (value <= 10) {
-            color="orange";
-            statusTextForTooltip="ok! but some waiting time / a bit crowded";
-          } else if (value > 10) {
-            color="red";
-            statusTextForTooltip="crowded place!";
-          }
+        if (value == 0) {
+          color = "green";
+          statusTextForTooltip = "fine! not crowded, no queues!";
+        } else if (value <= 10) {
+          color = "orange";
+          statusTextForTooltip = "ok! but some waiting time / a bit crowded";
+        } else if (value > 10) {
+          color = "red";
+          statusTextForTooltip = "crowded place!";
+        }
       } else {
-         color =  "#AFAFAF"; //outdated
+        color = "#AFAFAF"; //outdated
       }
 
 
 
 
 
-	  console.log("color:"+color);
+      console.log("color:" + color);
 
-      var feature=topics[message.destinationName];
-      if (feature){
-        feature.properties["color"]=color;
-        feature.properties["data-age"]=dataAgeInMinutes;
+      var feature = topics[message.destinationName];
+      if (feature) {
+        feature.properties["color"] = color;
+        feature.properties["data-age"] = dataAgeInMinutes;
         if (statusTextForTooltip != "") {
-            feature.properties["data-rendered-value"] = statusTextForTooltip;
+          feature.properties["data-rendered-value"] = statusTextForTooltip;
         }
         resultLayer.setStyle(styleFunction);
       }
-	}
+    }
 
 
-      function buildOverpassApiUrl(map, overpassQuery) {
-        var bounds = map.getBounds().getSouth() + ',' + map.getBounds().getWest() + ',' + map.getBounds().getNorth() + ',' + map.getBounds().getEast();
-        var nodeQuery = 'node[' + overpassQuery + '](' + bounds + ');';
-        var wayQuery = 'way[' + overpassQuery + '](' + bounds + ');';
-        var relationQuery = 'relation[' + overpassQuery + '](' + bounds + ');';
-        var query = '?data=[out:json][timeout:15];(' + nodeQuery + wayQuery + relationQuery + ');out body geom;';
-        var baseUrl = 'https://overpass-api.de/api/interpreter';
-        var resultUrl = baseUrl + query;
-        return resultUrl;
+    function buildOverpassApiUrl(map, overpassQuery) {
+      var bounds = map.getBounds().getSouth() + ',' + map.getBounds().getWest() + ',' + map.getBounds().getNorth() +
+        ',' + map.getBounds().getEast();
+      var nodeQuery = 'node[' + overpassQuery + '](' + bounds + ');';
+      var wayQuery = 'way[' + overpassQuery + '](' + bounds + ');';
+      var relationQuery = 'relation[' + overpassQuery + '](' + bounds + ');';
+      var query = '?data=[out:json][timeout:15];(' + nodeQuery + wayQuery + relationQuery + ');out body geom;';
+      var baseUrl = 'https://overpass-api.de/api/interpreter';
+      var resultUrl = baseUrl + query;
+      return resultUrl;
+    }
+
+    function loadDataWithForce(){
+      loadedBounds=null;
+      loadData();
+    }
+
+    function loadData() {
+      urlParams.set('lat',map.getCenter().lat);
+      urlParams.set('lng',map.getCenter().lng);
+      urlParams.set('zoomFactor',map.getZoom());
+      urlParams.set('query',$("#query-textfield").val());
+      
+      window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`); 
+
+      if (map.getZoom() < 8) {
+        setStatusText("reinzoomen um daten zu laden/zoom in to load data. " + map.getZoom());
+        return;
       }
 
-      function loadData() {
-            if (map.getZoom()<14) {
-              setStatusText("reinzoomen um daten zu laden/zoom in to load data. " +map.getZoom());
-              return;
+      var queryTextfieldValue = $("#query-textfield").val();
+      mapBounds=map.getBounds();
+      var alreadyLoaded = false;
+
+      
+      if (loadedBounds){
+         south=loadedBounds[0];
+         west=loadedBounds[1];
+         north=loadedBounds[2];
+         east=loadedBounds[3];
+         lastQuery=loadedBounds[4];
+         alreadyLoaded=(lastQuery==queryTextfieldValue && south<=mapBounds.getSouth() && west<=mapBounds.getWest() && north>=mapBounds.getNorth() && east>=mapBounds.getEast());
+      } 
+
+      console.log("already loaded:"+alreadyLoaded);
+      if (!alreadyLoaded) {
+        setStatusText("loading data for " + queryTextfieldValue);
+        topics = {};
+        if (resultLayer) {
+          map.removeLayer(resultLayer);
+        }
+        var overpassApiUrl = buildOverpassApiUrl(map, queryTextfieldValue);
+
+        $.get(overpassApiUrl, function (osmDataAsJson) {
+          
+          loadedBounds=[mapBounds.getSouth(),mapBounds.getWest(),mapBounds.getNorth(),mapBounds.getEast(),queryTextfieldValue];
+          
+          var resultAsGeojson = osmtogeojson(osmDataAsJson);
+          setStatusText("got data! - Click on an object to report waiting-time!");
+          resultLayer = L.geoJson(resultAsGeojson, {
+            style: styleFunction,
+            pointToLayer: function (feature, latlng) {
+              //usedColor=getUnknownColorForFeature(feature);
+              markerOptions=JSON.parse(JSON.stringify(geojsonMarkerOptions));
+              markerOptions["fillColor"]=getUnknownColorForFeature(feature,latlng) ;
+              markerOptions["color"]=getUnknownColorForFeature(feature,latlng) ;
+              markerOptions["stroke"]=false;
+              markerOptions["radius"]=geojsonMarkerOptions["radius"]*markerSizeFactor
+              //return L.circleMarker(latlng, markerOptions);
+
+              return L.circle(latlng, markerOptions); //circle size changes if you zoom in
+            },
+            filter: function (feature, layer) {
+              console.log(feature);
+              var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry
+                .type === "Polygon");
+              var isPoint = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry
+                .type === "Point");
+              //isPolygon = false;
+              if (isPoint) {
+                //feature.geometry.type = "LineString";
+                //var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
+                //feature.geometry.coordinates = [ polygonCenter.lat, polygonCenter.lng ];
+              }
+              return true;
+            },
+            onEachFeature: function (feature, layer) {
+              console.log("feature:" + feature.id);
+              featureID = feature.properties.id;
+              topic = mqttDefaultTopic + "/osmid/" + featureID + "/queueLength";
+              topics[topic] = feature;
+              layer.on('click', layerClickHandler);
             }
-
-            topics={};
-            if (resultLayer) {
-              map.removeLayer(resultLayer);
+          }).bindTooltip(function (layer) {
+            feature = layer.feature;
+            dataAge = feature.properties["data-age"];
+            dataValue = feature.properties["data-rendered-value"]
+            if (!dataAge) {
+              dataAge = "unknown";
+            } else {
+              dataAge = Math.round(dataAge);
             }
-            var queryTextfieldValue = $("#query-textfield").val();
-            setStatusText("loading data for "+ queryTextfieldValue);
-            var overpassApiUrl = buildOverpassApiUrl(map, queryTextfieldValue);
+            var tooltipText;
+            if (dataValue) {
+              tooltipText = feature.properties.tags.name + "<br>" + dataValue + "<br>(" + dataAge +
+                " minutes old)<br>click to report new status";
+            } else {
+              tooltipText = feature.properties.tags.name +
+                "<br>no value reported yet!<br>be the first and click to report new status!";
+            }
+            return String(tooltipText); // Needs to be a string
+          }).addTo(map);
+          //map.on('click',onMapClick);
+          if (client.isConnected())
+            client.disconnect();
 
-            $.get(overpassApiUrl, function (osmDataAsJson) {
-              var resultAsGeojson = osmtogeojson(osmDataAsJson);
-              setStatusText("got data! - Click on an object to report waiting-time!");
-              resultLayer = L.geoJson(resultAsGeojson, {
-                style: styleFunction,
-                pointToLayer: function (feature, latlng) {
-                  //return L.circleMarker(latlng, geojsonMarkerOptions);
-                  return L.circle(latlng, geojsonMarkerOptions); //circle size changes if you zoom in
-                 },
-                filter: function (feature, layer) {
-                  console.log(feature);
-                  var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
-                  var isPoint = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Point");
-                  //isPolygon = false;
-                  if (isPoint) {
-                    //feature.geometry.type = "LineString";
-                    //var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
-                    //feature.geometry.coordinates = [ polygonCenter.lat, polygonCenter.lng ];
-                  }
-                  return true;
-                },
-                onEachFeature: function (feature, layer) {
-                  console.log("feature:" + feature.id);
-                  featureID=feature.properties.id;
-                  topic=mqttDefaultTopic+"/osmid/"+featureID+"/queueLength";
-                  topics[topic] = feature;
-                  layer.on('click',layerClickHandler);
-                }
-              }).bindTooltip(function (layer) {
-		        feature=layer.feature;
-		        dataAge=feature.properties["data-age"];
-		        dataValue=feature.properties["data-rendered-value"]
-		        if (!dataAge){
-		         dataAge="unknown";
-		        } else {
-		         dataAge=Math.round(dataAge);
-		        }
-                var tooltipText;
-                if (dataValue) {
-                  tooltipText=feature.properties.tags.name+"<br>" +dataValue + "<br>("+dataAge+" minutes old)<br>click to report new status";
-		        } else {
-		          tooltipText=feature.properties.tags.name+"<br>no value reported yet!<br>be the first and click to report new status!";
-		        }
-		        return String(tooltipText); // Needs to be a string
-	          }).addTo(map);
-              //map.on('click',onMapClick);
-              if (client.isConnected())
-                client.disconnect();
-
-            });
+        }).fail(function(e) {
+          setStatusText("error loading data!" + e);
+        });
 
       }
 
-	function onLocationFound(e) {
-		var radius = e.accuracy / 2;
+    }
 
-		L.marker(e.latlng).addTo(map).bindPopup("Dein Standort ("+radius+" meter radius)");
+    function onLocationFound(e) {
+      var radius = e.accuracy / 2;
 
-		//L.circle(e.latlng, radius).addTo(map);
-	}
+      L.marker(e.latlng).addTo(map).bindPopup("Dein Standort (" + radius + " meter radius)");
 
-	function onLocationError(e) {
-		alert(e.message);
-	}
+      //L.circle(e.latlng, radius).addTo(map);
+    }
 
-     function setStatusText(text) {
-          var html_node = document.getElementById("statusline");
-          if (html_node != null)
-          {
-                var div = html_node.firstChild;
-                div.deleteData(0, div.nodeValue.length);
-                div.appendData(text);
-          }
-     }
-     function connectMqttClient() {
-         client.connect(
-                {
-                    onSuccess:onConnect,
-                    keepAliveInterval: 30,
-                    useSSL:true
-                }
-            );
-     }
+    function onLocationError(e) {
+      alert(e.message);
+    }
 
-      function init() {
+    function setTitleText(text) {
+      var html_node = document.getElementById("title");
+      if (html_node != null) {
+        var div = html_node.firstChild;
+        div.deleteData(0, div.nodeValue.length);
+        div.appendData(text);
+      }
+    }
 
-        var urlParams = new URLSearchParams(window.location.search);
+    function setStatusText(text) {
+      var html_node = document.getElementById("statusline");
+      if (html_node != null) {
+        var div = html_node.firstChild;
+        div.deleteData(0, div.nodeValue.length);
+        div.appendData(text);
+      }
+    }
 
-        console.log(urlParams.has('lat')); // true
-        console.log(urlParams.has('lng')); // true
-        console.log(urlParams.has('query')); // true
-        console.log(urlParams.get('lat')); // "edit"
-        console.log(urlParams.get('lng')); // "edit"
-        console.log(urlParams.get('query')); // "edit"
+    function connectMqttClient() {
+      client.connect({
+        onSuccess: onConnect,
+        keepAliveInterval: 30,
+        useSSL: true
+      });
+    }
 
+    function init() {
 
-        //console.log(urlParams.getAll('action')); // ["edit"]
-        //console.log(urlParams.toString()); // "?post=1234&action=edit"
-        //console.log(urlParams.append('active', '1')); // "?post=1234&action=edit&active=1"
+      urlParams = new URLSearchParams(window.location.search);
 
+      if (false) {
+      console.log(urlParams.has('lat')); // true
+      console.log(urlParams.has('lng')); // true
+      console.log(urlParams.has('query')); // true
+      console.log(urlParams.get('lat')); // "edit"
+      console.log(urlParams.get('lng')); // "edit"
+      console.log(urlParams.get('query')); // "edit"
+      console.log(urlParams.get('simulationAlgo')); // "edit"
 
-
-        var initialLat=51.2585357;
-        var initialLng=9.4491496;
-        var askForLocation=true;
-
-        //mechanism to point the map to a different location and prevent the system from asking for browser loc
-        if (urlParams.has('lat') && urlParams.has('lng')){
-          initialLat=urlParams.get('lat');
-          initialLng=urlParams.get('lng');
-          askForLocation=false;
-        }
-
-        //query parameter to change the default search query
-        if (urlParams.has('query')){
-            var inputF = document.getElementById("query-textfield");
-            inputF.value = urlParams.get('query');
-        }
-
-        map = L.map('map').setView([initialLat,initialLng], 14);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18,
-            minZoom: 6,
-            attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
-        }).addTo(map);
-
-        $("#query-button").click(loadData);
-        map.on('moveend',loadData);
-    	map.on('locationfound', onLocationFound);
-	    map.on('locationerror', onLocationError);
-
-        if (askForLocation) {
-            map.locate({setView: true, maxZoom: 16});
-        } else {
-            loadData();
-        }
-
-        var clientID=createClientID();
-        // Create a client instance
-        console.log("used client id"+clientID);
-        client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
-
-        // set callback handlers
-        client.onConnectionLost = onConnectionLost;
-        client.onMessageArrived = onMessageArrived;
-        //client.startTrace();
-
-        // connect the client
-        connectMqttClient();
       }
 
 
+      //console.log(urlParams.getAll('action')); // ["edit"]
+      //console.log(urlParams.toString()); // "?post=1234&action=edit"
+      //console.log(urlParams.append('active', '1')); // "?post=1234&action=edit&active=1"
 
-    </script>
+
+
+      var initialLat = 51.2585357;
+      var initialLng = 9.4491496;
+      var askForLocation = true;
+      var initialZoom=14;
+
+      //mechanism to point the map to a different location and prevent the system from asking for browser loc
+      if (urlParams.has('lat') && urlParams.has('lng')) {
+        initialLat = urlParams.get('lat');
+        initialLng = urlParams.get('lng');
+        askForLocation = false;
+      }
+
+      //query parameter to change the default search query
+      if (urlParams.has('query')) {
+        var inputF = document.getElementById("query-textfield");
+        inputF.value = urlParams.get('query');
+      }
+
+      if (urlParams.has('zoomFactor')) {
+        initialZoom=urlParams.get("zoomFactor");
+      }
+
+      if (urlParams.has('simulatedData')) {
+        simulatedData=urlParams.get("simulatedData");
+      }
+
+      if (urlParams.has("altTitle")){
+        setTitleText(urlParams.get("altTitle"));
+      }
+
+      if (urlParams.has("markerSizeFactor")){
+        markerSizeFactor=Number(urlParams.get("markerSizeFactor"));
+      }
+      
+
+      
+      // URL: https://example.com?version=1.0
+      
+      urlParams.set('version', 1.0);
+      urlParams.set('lat',initialLat);
+      urlParams.set('lng',initialLng);
+      urlParams.set('zoomFactor',14);
+      urlParams.set('query',$("#query-textfield").val());
+      window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`); 
+      
+      map = L.map('map').setView([initialLat, initialLng], initialZoom);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        minZoom: 6,
+        attribution: 'Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> contributors</a>'
+      }).addTo(map);
+
+      $("#query-button").click(loadDataWithForce);
+      map.on('moveend', loadData);
+      map.on('locationfound', onLocationFound);
+      map.on('locationerror', onLocationError);
+
+      if (askForLocation) {
+        map.locate({
+          setView: true,
+          maxZoom: 16
+        });
+      } else {
+        loadData();
+      }
+      
+      var clientID = createClientID();
+      // Create a client instance
+      console.log("used client id" + clientID);
+      client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
+
+      // set callback handlers
+      client.onConnectionLost = onConnectionLost;
+      client.onMessageArrived = onMessageArrived;
+      //client.startTrace();
+
+      // connect the client
+      connectMqttClient();
+    }
+  </script>
 </head>
+
 <body onload="init()">
-
-<div id="map" class="smallmap">
+  <div id="title" style="font-size:24pt; font-weight:bold; font-family:sans-serif">Supermarkt Warteschlangen</div>
+  <div id="map" class="smallmap">
     <div class="leaflet-control-container">
-        <div class="leaflet-top leaflet-right">
-            <div id="overpass-api-controls" class="leaflet-bar leaflet-control">
-                <input id="query-textfield" value="shop=supermarket" size="30">
-                <input id="query-button" type="button" value="Laden">
-            </div>
+      <div class="leaflet-top leaflet-right">
+        <div id="overpass-api-controls" class="leaflet-bar leaflet-control">
+          <input id="query-textfield" value="shop=supermarket" size="30">
+          <input id="query-button" type="button" value="Laden">
         </div>
+      </div>
     </div>
-</div>
-<div id="statusline" style="font-size:12pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
+  </div>
+  <div id="statusline" style="font-size:12pt; font-weight:bold; font-family:sans-serif">No status set yet.</div>
 
-<div id="footer">
+  <div id="footer">
     This is a mashup prototype for a crowd sourcing "waiting time before a supermarket" map - it is functional,
-    but obviously of not in production quality. It was created as a fun/learning project as part of the #WirvsVirus hackathon in 2020.
+    but obviously of not in production quality. <br>
+    <b>There is absolutely no quality control - neither for the rendered data nor for the code.</b>
+    <br>
+    It was created as a fun/learning project as part of the #WirvsVirus hackathon in 2020. 
 
-    There is no real server backend for this solution - this page is using the public available MQTT Server mqtt.eclipse.org to publish
-    your reported status and the nice Overpass API to get the list of supermarkets from the OpenStreetmap data.
+    There is no real server backend for this solution - this page is using the public available MQTT Server
+    mqtt.eclipse.org to publish your reported data/status and the nice Overpass API to get the list of supermarkets from the OpenStreetmap data.
+    <br>
+    <b>Disclaimer: The rendered data can be easily manipulated by anybody on the internet, nobody is taking any liability! - so do not count on it for anything important!</b>
 
-</div>
+  </div>
 
 </body>
+
 </html>
-
-
