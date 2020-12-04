@@ -10,5 +10,5 @@ Three external servers are being used (their public APIs are being queried by yo
 - overpass-api.de/api/interpreter to get the actual data where the elements that you are interested are located
  
 
-Map with Leaflet: (./map-leaflet.html)
+[Map with Leaflet](./map-leaflet.html)
 
