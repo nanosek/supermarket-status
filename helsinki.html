@@ -456,7 +456,7 @@ var template =
 
     function resetTopics() {
       topics = {};
-      topics["de/testing/transport/#"]="marker1";
+      topics["de/transport/#"]="marker1";
 
     }
 
@@ -750,7 +750,7 @@ var template =
       var clientID = createClientID();
       // Create a client instance
       console.log("used client id" + clientID);
-      client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
+      client = new Paho.MQTT.Client("mqtt.eclipseprojects.io", Number(443), clientID);
 
       // set callback handlers
       client.onConnectionLost = onConnectionLost;
