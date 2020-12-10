@@ -32,7 +32,7 @@
     }
   </style>
 
-  <title>SuperMarket Queue Length Status Prototype</title>
+  <title>Wo gibts?</title>
 
   <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
   <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
@@ -593,7 +593,7 @@
       var clientID = createClientID();
       // Create a client instance
       console.log("used client id" + clientID);
-      client = new Paho.MQTT.Client("mqtt.eclipse.org", Number(443), clientID);
+      client = new Paho.MQTT.Client("mqtt.eclipseprojects.io", Number(443), clientID);
 
       // set callback handlers
       client.onConnectionLost = onConnectionLost;
